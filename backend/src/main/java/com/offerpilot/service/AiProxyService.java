@@ -5,6 +5,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 
+import java.util.HashMap;
 import java.util.Map;
 
 @Service
@@ -20,13 +21,29 @@ public class AiProxyService {
     }
 
     public String analyzeResume(String textContent) {
-        // Here we'd map to FastAPI /api/ai/resume
-        // For simplicity returning a mock
-        return "{\"score\": 85, \"feedback\": \"Good resume, add more metrics.\"}";
+        String url = aiServiceUrl + "/api/ai/resume";
+        Map<String, String> request = new HashMap<>();
+        request.put("text", textContent);
+
+        try {
+            return restTemplate.postForObject(url, request, String.class);
+        } catch (Exception e) {
+            e.printStackTrace();
+            return "{\"score\": 0, \"feedback\": \"Failed to reach AI Service.\"}";
+        }
     }
 
-    public String getCodeFeedback(String question, String code) {
-        // Calls the python service for code feedback
-        return "{\"overallScore\": 90, \"strengths\": \"Clean code\", \"improvements\": \"O(n) time is possible.\"}";
+    public String getCodeFeedback(String questionDescription, String code) {
+        String url = aiServiceUrl + "/api/ai/code-feedback";
+        Map<String, String> request = new HashMap<>();
+        request.put("question_description", questionDescription);
+        request.put("code", code);
+
+        try {
+            return restTemplate.postForObject(url, request, String.class);
+        } catch (Exception e) {
+            e.printStackTrace();
+            return "{\"overallScore\": 0, \"detailed_feedback\": \"Failed to reach AI Service.\"}";
+        }
     }
 }

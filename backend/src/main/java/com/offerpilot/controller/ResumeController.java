@@ -16,6 +16,8 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.List;
 import java.util.UUID;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.JsonNode;
 
 @RestController
 @RequestMapping("/api/resume")
@@ -23,11 +25,14 @@ public class ResumeController {
 
     private final ResumeRepository resumeRepository;
     private final AiProxyService aiProxyService;
+    private final ObjectMapper objectMapper;
     private final String uploadDir = "uploads/resumes";
 
-    public ResumeController(ResumeRepository resumeRepository, AiProxyService aiProxyService) {
+    public ResumeController(ResumeRepository resumeRepository, AiProxyService aiProxyService,
+            ObjectMapper objectMapper) {
         this.resumeRepository = resumeRepository;
         this.aiProxyService = aiProxyService;
+        this.objectMapper = objectMapper;
 
         File directory = new File(uploadDir);
         if (!directory.exists()) {
@@ -49,13 +54,23 @@ public class ResumeController {
             Path filePath = Paths.get(uploadDir, fileName);
             Files.copy(file.getInputStream(), filePath);
 
+            String aiResponse = aiProxyService.analyzeResume("Extracted text would go here");
+            int score = 60;
+            try {
+                JsonNode jsonNode = objectMapper.readTree(aiResponse);
+                if (jsonNode.has("score")) {
+                    score = jsonNode.get("score").asInt();
+                }
+            } catch (Exception ex) {
+                // Ignore parse errors, fallback to 60
+            }
+
             Resume resume = Resume.builder()
                     .user(userDetails.getUser())
                     .fileName(file.getOriginalFilename())
                     .filePath(filePath.toString())
-                    // In a real scenario we parse PDF text. Sending dummy for now.
-                    .analysisResult(aiProxyService.analyzeResume("Dummy Text"))
-                    .score((int) (Math.random() * 40) + 60)
+                    .analysisResult(aiResponse)
+                    .score(score)
                     .build();
 
             resumeRepository.save(resume);

@@ -6,7 +6,12 @@ import com.offerpilot.model.CodingQuestion;
 import com.offerpilot.model.InterviewSession;
 import com.offerpilot.repository.CodingQuestionRepository;
 import com.offerpilot.repository.InterviewSessionRepository;
+import com.offerpilot.repository.SessionFeedbackRepository;
+import com.offerpilot.model.SessionFeedback;
+import com.offerpilot.service.AiProxyService;
 import com.offerpilot.security.CustomUserDetails;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
@@ -20,11 +25,20 @@ public class InterviewSessionController {
 
     private final InterviewSessionRepository sessionRepository;
     private final CodingQuestionRepository questionRepository;
+    private final SessionFeedbackRepository feedbackRepository;
+    private final AiProxyService aiProxyService;
+    private final ObjectMapper objectMapper;
 
     public InterviewSessionController(InterviewSessionRepository sessionRepository,
-            CodingQuestionRepository questionRepository) {
+            CodingQuestionRepository questionRepository,
+            SessionFeedbackRepository feedbackRepository,
+            AiProxyService aiProxyService,
+            ObjectMapper objectMapper) {
         this.sessionRepository = sessionRepository;
         this.questionRepository = questionRepository;
+        this.feedbackRepository = feedbackRepository;
+        this.aiProxyService = aiProxyService;
+        this.objectMapper = objectMapper;
     }
 
     @GetMapping
@@ -71,8 +85,25 @@ public class InterviewSessionController {
 
         sessionRepository.save(session);
 
-        // In a real app, here we would call the AI Evaluation Service.
-        // For now, we will return the saved session.
+        try {
+            String aiResponse = aiProxyService.getCodeFeedback(session.getQuestion().getDescription(),
+                    request.getCode());
+            JsonNode jsonNode = objectMapper.readTree(aiResponse);
+
+            SessionFeedback feedback = SessionFeedback.builder()
+                    .session(session)
+                    .overallScore(jsonNode.has("overallScore") ? jsonNode.get("overallScore").asInt() : 0)
+                    .strengths(jsonNode.has("strengths") ? jsonNode.get("strengths").asText() : "")
+                    .improvements(jsonNode.has("improvements") ? jsonNode.get("improvements").asText() : "")
+                    .detailedFeedback(
+                            jsonNode.has("detailed_feedback") ? jsonNode.get("detailed_feedback").asText() : "")
+                    .build();
+
+            feedbackRepository.save(feedback);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+
         return ResponseEntity.ok(session);
     }
 }
